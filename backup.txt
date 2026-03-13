@@ -1,0 +1,236 @@
+# import cv2
+# import numpy as np
+# import os
+# import time
+# from mtcnn import MTCNN
+# from keras_facenet import FaceNet
+# from scipy.spatial.distance import cosine
+# #from twilio_alert import send_alert
+# from twilio_sms import send_sms_alert
+
+# # -----------------------
+# # Initialize Models
+# # -----------------------
+# detector = MTCNN()
+# embedder = FaceNet()
+
+# # -----------------------
+# # Load Embeddings
+# # -----------------------
+# data = np.load("embeddings/face_embeddings.npz", allow_pickle=True)
+# known_embeddings = data["embeddings"]
+# known_names = data["names"]
+
+# assert len(known_embeddings) > 0, "❌ No face embeddings found!"
+
+# # -----------------------
+# # Settings
+# # -----------------------
+# THRESHOLD = 0.4
+# ALERT_COOLDOWN = 30  # seconds
+# last_alert_time = 0
+
+# os.makedirs("unknown_faces", exist_ok=True)
+
+# # -----------------------
+# # Camera (WINDOWS FIX)
+# # -----------------------
+# cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+# if not cap.isOpened():
+#     print("❌ Camera not opened")
+#     exit()
+
+# print("✅ Camera started")
+
+# # -----------------------
+# # Main Loop
+# # -----------------------
+# while True:
+#     ret, frame = cap.read()
+#     if not ret:
+#         break
+
+#     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#     faces = detector.detect_faces(rgb)
+
+#     for face in faces:
+#         x, y, w, h = face['box']
+#         face_img = rgb[y:y+h, x:x+w]
+
+#         if face_img.size == 0:
+#             continue
+
+#         face_img = cv2.resize(face_img, (160, 160))
+#         emb = embedder.embeddings([face_img])[0]
+
+#         distances = np.array([cosine(emb, e) for e in known_embeddings])
+#         min_dist = distances.min()
+
+#         if min_dist < THRESHOLD:
+#             name = known_names[distances.argmin()]
+#             label = f"Authenticated: {name}"
+#             color = (0, 255, 0)
+#         else:
+#             label = "Unauthenticated"
+#             color = (0, 0, 255)
+
+#             # Save unknown face
+#             timestamp = int(time.time())
+#             img_path = f"unknown_faces/unknown_{timestamp}.jpg"
+#             cv2.imwrite(img_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
+
+#             # SMS Alert (Cooldown)
+#             if time.time() - last_alert_time > ALERT_COOLDOWN:
+#                 send_sms_alert()
+#                 last_alert_time = time.time()
+
+#         cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+#         cv2.putText(frame, label, (x, y-10),
+#                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+
+#     cv2.imshow("Face Authentication System", frame)
+
+#     if cv2.waitKey(1) & 0xFF == 27:
+#         break
+
+# cap.release()
+# cv2.destroyAllWindows()
+
+
+import cv2
+import numpy as np
+import os
+import time
+from mtcnn import MTCNN
+from keras_facenet import FaceNet
+from scipy.spatial.distance import cosine
+from twilio_sms import send_sms_alert
+
+# -----------------------
+# Initialize Models
+# -----------------------
+detector = MTCNN()
+embedder = FaceNet()
+
+# -----------------------
+# Load Stored Embeddings
+# -----------------------
+data = np.load("embeddings/face_embeddings.npz", allow_pickle=True)
+known_embeddings = data["embeddings"]
+known_names = data["names"]
+
+assert len(known_embeddings) > 0, "❌ No face embeddings found!"
+
+# -----------------------
+# Settings
+# -----------------------
+THRESHOLD = 0.4
+ALERT_COOLDOWN = 30
+last_alert_time = 0
+
+os.makedirs("unknown_faces", exist_ok=True)
+
+# -----------------------
+# Camera Setup (Windows)
+# -----------------------
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+if not cap.isOpened():
+    print("❌ Camera not opened")
+    exit()
+
+print("✅ Camera started")
+
+# -----------------------
+# Main Loop
+# -----------------------
+while True:
+
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # stabilize frame size
+    frame = cv2.resize(frame, (640, 480))
+
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    faces = detector.detect_faces(rgb)
+
+    for face in faces:
+
+        x, y, w, h = face['box']
+
+        # Fix negative coordinates
+        x = max(0, x)
+        y = max(0, y)
+
+        x2 = min(x + w, rgb.shape[1])
+        y2 = min(y + h, rgb.shape[0])
+
+        face_img = rgb[y:y2, x:x2]
+
+        # Skip invalid faces
+        if face_img.size == 0 or face_img.shape[0] < 40 or face_img.shape[1] < 40:
+            continue
+
+        face_img = cv2.resize(face_img, (160, 160))
+
+        # Create embedding
+        emb = embedder.embeddings([face_img])[0]
+
+        # Compare with known faces
+        distances = np.array([cosine(emb, e) for e in known_embeddings])
+        min_dist = distances.min()
+
+        if min_dist < THRESHOLD:
+
+            name = known_names[distances.argmin()]
+            label = f"Authenticated: {name}"
+            color = (0, 255, 0)
+
+        else:
+
+            label = "Unauthenticated"
+            color = (0, 0, 255)
+
+            # Save unknown face
+            timestamp = int(time.time() * 1000)
+            img_path = f"unknown_faces/unknown_{timestamp}.jpg"
+
+            cv2.imwrite(img_path, cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR))
+
+            # Send SMS Alert
+            if time.time() - last_alert_time > ALERT_COOLDOWN:
+
+                print("⚠️ Unknown face detected! Sending SMS alert...")
+                send_sms_alert()
+
+                last_alert_time = time.time()
+
+        # Draw rectangle
+        cv2.rectangle(frame, (x, y), (x2, y2), color, 2)
+
+        cv2.putText(
+            frame,
+            label,
+            (x, y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            color,
+            2
+        )
+
+    cv2.imshow("Face Authentication System", frame)
+
+    # Press ESC to exit
+    if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+
+# -----------------------
+# Cleanup
+# -----------------------
+cap.release()
+cv2.destroyAllWindows()

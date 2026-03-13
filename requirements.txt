@@ -1,0 +1,11 @@
+pip install mtcnn
+pip install tensorflow
+pip install dlib
+pip install face-recognition
+pip install opencv-python
+pip install numpy
+pip install tensorflow
+pip install keras-facenet
+pip install scipy
+pip install twilio
+pip install requests
