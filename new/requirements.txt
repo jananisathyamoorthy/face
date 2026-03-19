@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────
+#  AI Security System — Python Dependencies
+# ─────────────────────────────────────────────
+
+# Streamlit UI
+streamlit>=1.35.0
+
+# Computer vision
+opencv-python>=4.9.0
+numpy>=1.24.0
+
+# Face detection & recognition
+mtcnn>=0.1.1
+keras-facenet>=0.3.2
+scipy>=1.11.0
+tensorflow>=2.14.0        # required by keras-facenet
+
+# Object detection (YOLOv11 / YOLOv12)
+ultralytics>=8.3.0        # includes YOLO11 & YOLO12
+
+# Google Gemini LLM
+google-generativeai>=0.7.0
+
+# HTTP (for formsubmit.co alerts)
+requests>=2.31.0
+
+# ─────────────────────────────────────────────
+#  Optional speed-ups
+# ─────────────────────────────────────────────
+# torch>=2.2.0            # GPU acceleration for YOLO
+# torchvision>=0.17.0
